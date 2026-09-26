@@ -70,7 +70,7 @@ python3 -B configure_whatsapp.py --help
 ```sh
 python3 -B -m unittest discover -s tests
 python3 -B verify_delivery.py
-node --test tests/test_sales_ui.js tests/test_customer_ui.js tests/test_stream_ui.js
+node --test tests/test_sales_ui.js tests/test_customer_ui.js tests/test_stream_ui.js tests/test_knowledge_ui.js
 ```
 
 这些测试默认使用临时目录、合成数据和离线替身，不需要 AI 授权，也不连接真实 WhatsApp。`verify_delivery.py` 检查工作区隔离、导入、知识变化、审核和恢复；Node 检查使用离线 UI 环境，不等于真实浏览器视觉验收。真实渠道覆盖和回复质量需要另行在授权范围内验证。

@@ -439,6 +439,61 @@ class WebServerTests(unittest.TestCase):
         self.assertEqual(self.request('/api/conversations')[1]['items'][0]['status'], 'stale')
         self.assertEqual(self.request('/api/review', {'draft_id': job['draft_id'], 'decision': 'approve', 'final_text': '旧草稿'})[0], 409)
 
+    def test_first_knowledge_document_in_empty_workspace_persists_after_restart(self):
+        self.stop_server()
+        empty_config = self.config | {'knowledge': []}
+        self.ws = Workspace.init(self.root / 'empty-workspace', 'alpha', empty_config)
+        self.start_server()
+        before = self.request('/api/knowledge')[1]
+        self.assertEqual(before['config']['knowledge'], [])
+        document = {'id': 'K_first', 'version': '1', 'title': '样品申请',
+                    'content': '申请样品前确认规格和收件地址。',
+                    'valid_from': '2020-01-01', 'valid_until': '2099-12-31'}
+        config = before['config'] | {'knowledge': [document]}
+        status, published, _ = self.request('/api/knowledge', {
+            'config': config, 'base_release': before['active_release']})
+        self.assertEqual(status, 200, published)
+        self.assertTrue(published['changed'])
+        saved = self.request('/api/knowledge')[1]
+        self.assertEqual(saved['config'], config)
+        self.assertNotEqual(saved['active_release'], before['active_release'])
+        self.assertEqual(saved['history'][:-1], before['history'])
+        self.assertEqual(saved['history'][-1]['previous_release'], before['active_release'])
+        self.stop_server()
+        self.ws = Workspace.load(self.ws.root)
+        self.start_server()
+        self.assertEqual(self.request('/api/knowledge')[1], saved)
+
+    def test_removing_last_document_keeps_history_and_citation_but_blocks_old_reply(self):
+        class CitingRunner(StubRunner):
+            def analyze(inner, context):
+                return super().analyze(context) | {'citations': [{'id': 'K1', 'version': '1'}]}
+        self.server.runner_factory = CitingRunner
+        job = self.wait_job(self.analyze())
+        before = self.request('/api/knowledge')[1]
+        original_draft = self.request('/api/conversation?account=a&conversation=c')[1]['drafts'][0]
+        original_file = self.ws.root / 'knowledge' / 'releases' / before['active_release'] / 'alpha.json'
+        original_bytes = original_file.read_bytes()
+        status, published, _ = self.request('/api/knowledge', {
+            'config': before['config'] | {'knowledge': []}, 'base_release': before['active_release']})
+        self.assertEqual(status, 200, published)
+        self.assertTrue(published['changed'])
+        saved = self.request('/api/knowledge')[1]
+        self.assertEqual(saved['config']['knowledge'], [])
+        self.assertEqual(saved['history'][:-1], before['history'])
+        self.assertEqual(saved['history'][-1]['previous_release'], before['active_release'])
+        self.assertEqual(original_file.read_bytes(), original_bytes)
+        self.assertEqual(json.loads(original_bytes)['knowledge'], before['config']['knowledge'])
+        detail = self.request('/api/conversation?account=a&conversation=c')[1]
+        self.assertEqual(detail['knowledge'], [])
+        self.assertEqual(detail['conversation']['status'], 'stale')
+        self.assertTrue(detail['drafts'][0]['requires_recheck'])
+        self.assertEqual(detail['drafts'][0]['citation_sources'], original_draft['citation_sources'])
+        self.assertEqual(detail['drafts'][0]['citation_sources'][0]['content'], '补齐数量后再报价。')
+        status, error, _ = self.request('/api/adopt', {'draft_id': job['draft_id'], 'final_text': '旧回复'})
+        self.assertEqual(status, 400, error)
+        self.assertEqual(self.request('/api/activity')[1]['outbox'], [])
+
     def test_draft_citations_preserve_snapshot_when_same_version_content_is_changed(self):
         class CitingRunner(StubRunner):
             def analyze(inner, context):
@@ -613,6 +668,36 @@ class WebServerTests(unittest.TestCase):
         status, _, _ = self.request('/api/knowledge', {'config': old['config'], 'base_release': old['active_release']})
         self.assertEqual(status, 400)
         self.assertEqual(self.request('/api/strategy')[1]['text'], '新的中文回复偏好')
+
+    def test_stale_add_or_remove_cannot_overwrite_new_knowledge_or_strategy(self):
+        for action in ('add', 'remove'):
+            for newer_change in ('knowledge', 'strategy'):
+                with self.subTest(action=action, newer_change=newer_change):
+                    before = self.request('/api/knowledge')[1]
+                    stale_config = json.loads(json.dumps(before['config']))
+                    if action == 'add':
+                        stale_config['knowledge'].append(dict(stale_config['knowledge'][0],
+                                                              id='K_stale', title='未保存的新资料'))
+                    else:
+                        stale_config['knowledge'] = []
+                    if newer_change == 'strategy':
+                        status, published, _ = self.request('/api/strategy', {
+                            'text': '另一页面已确认的策略：' + action,
+                            'base_release': before['active_release']})
+                    else:
+                        config = before['config']
+                        config['knowledge'][0]['content'] = '另一页面已确认的内容：' + action
+                        status, published, _ = self.request('/api/knowledge', {
+                            'config': config, 'base_release': before['active_release']})
+                    self.assertEqual(status, 200, published)
+                    current = self.request('/api/knowledge')[1]
+                    releases = set((self.ws.root / 'knowledge' / 'releases').iterdir())
+                    status, error, _ = self.request('/api/knowledge', {
+                        'config': stale_config, 'base_release': before['active_release']})
+                    self.assertEqual(status, 400, error)
+                    self.assertIn('重新载入', error['error'])
+                    self.assertEqual(self.request('/api/knowledge')[1], current)
+                    self.assertEqual(set((self.ws.root / 'knowledge' / 'releases').iterdir()), releases)
 
     def test_adopt_is_idempotent_and_revisions_preserve_prior_words(self):
         draft_id = self.wait_job(self.analyze())['draft_id']
