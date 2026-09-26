@@ -9,7 +9,7 @@ python3 -B create_workbench_demo.py --workspace workspaces/demo
 python3 -B start_workbench.py --workspace workspaces/demo --port 0 --open
 ```
 
-演示创建只写入合成数据，不连接 WhatsApp 或模型。已有目录不要再次初始化；需要全新演示时换一个工作区路径。终端前台运行按 Ctrl+C 停止。
+演示创建只写入合成数据，不连接 WhatsApp 或模型。演示是同一程序的可选独立工作区；Mac 正式安装创建空白客户工作区，不导入这批虚构数据。已有目录不要再次初始化；需要全新演示时换一个工作区路径。终端前台运行按 Ctrl+C 停止。
 
 需要后台运行时可用以下入口；停止命令先验证实例身份，不要用模糊进程名终止其他服务：
 
@@ -52,7 +52,7 @@ Mac 套件默认安装在当前用户的 `~/Library/Application Support/InquiryA
 | `adapters.py` | JSON / JSONL 和 Chatwoot 文件事件转换 |
 | `deploy/macos/` | 现场安装、后台桥接、编号启动入口 |
 
-企业知识格式和消息字段见 [INPUTS.md](INPUTS.md)。所有操作使用明确工作区；CLI 的 `--workspace` 必须放在子命令前：
+日常资料维护从“企业资料”进入，支持新增、编辑、移除和有效期；“回复设置”将沟通习惯、必问信息与需人工确认事项统一保存。高级 JSON 位于“更多 → 负责人设置 → 高级资料维护”。企业知识格式和消息字段见 [INPUTS.md](INPUTS.md)。所有操作使用明确工作区；CLI 的 `--workspace` 必须放在子命令前：
 
 ```sh
 python3 -B -m inquiry_product --help
@@ -116,6 +116,6 @@ python3 -B scripts/package_mac_onsite.py \
 
 桥接源自 [lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp)，默认输入为仓库中的 `third_party/whatsapp-mcp`，不依赖开发者私有目录。产品构建移除了发送、下载 HTTP 接口，只保留接收缓存与受控本机状态/停止接口。构建脚本会测试并附带对应 vendor 源码和许可，不需要 WhatsApp 登录；首次获取 Go 依赖需要网络。固定输入与修改方式见 [BRIDGE_BUILD.md](BRIDGE_BUILD.md)。
 
-新构建的 r3 增加自有代码 MIT 许可文件，不会自动上传或覆盖已发布 r2。官方组件信息见 [MAC_COMPONENTS.md](MAC_COMPONENTS.md)，第三方许可见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。不要将运行中的桥接目录、登录状态或客户数据作为构建输入打包。
+r3 包含企业资料表单、三部分回复设置及自有代码 MIT 许可文件；发布入口为 [Mac 套件 r3](https://github.com/zhengshuyuan2023uk/inquiry-assistant-downloads/releases/tag/macos-arm64-0.7.0a1-r3)。上述构建命令仅生成本地文件，上传发布需另行执行。官方组件信息见 [MAC_COMPONENTS.md](MAC_COMPONENTS.md)，第三方许可见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。不要将运行中的桥接目录、登录状态或客户数据作为构建输入打包。
 
-公开源码与测试允许独立检查业务逻辑；安装套件是否能用于某位客户，仍要按[现场安装手册](MAC_ONSITE.md)完成实机验收。
+安装套件仍面向 Apple 芯片 Mac 的受控试点，没有自动升级。已有客户安装须先备份、在恢复副本验证，再由实施人员升级；重复安装不替代升级。公开源码与测试允许独立检查业务逻辑；安装套件是否能用于某位客户，仍要按[现场安装手册](MAC_ONSITE.md)完成实机验收。
