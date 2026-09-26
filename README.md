@@ -6,6 +6,8 @@
 
 **业务员下载安装包：** [Mac 套件 r3 下载页](https://github.com/zhengshuyuan2023uk/inquiry-assistant-downloads/releases/tag/macos-arm64-0.7.0a1-r3) · [现场安装手册](docs/MAC_ONSITE.md)。`inquiry-assistant-0.7.0a1-macos-arm64-r3.zip` 是现场安装套件，包含本页介绍的企业资料表单与三部分回复设置；本仓库面向阅读、修改和构建源码的开发者。
 
+**业务员上手视频：** [新版工作台操作演示（约 2 分 27 秒，中文配音和字幕）](https://github.com/zhengshuyuan2023uk/inquiry-assistant/releases/tag/sales-guide-r3)。使用虚构数据演示添加客户、更新聊天、三种回复操作、企业资料和回复设置，以及核对后复制发送的流程。
+
 正式安装创建客户自己的空白工作区，不预置虚构客户、聊天或报价。下方合成演示是可选体验，使用同一套程序和独立演示工作区；不需要维护两套产品。
 
 ## 已有功能
