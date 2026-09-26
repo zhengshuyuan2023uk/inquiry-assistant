@@ -2,11 +2,21 @@
 
 把获准的客户聊天与企业资料整理成销售回复建议的本地工作台。业务员可以手动更新聊天、选择客户、生成回复、按要求调整或润色自己的话，检查后复制到 WhatsApp 发送。
 
+## 业务员上手视频
+
+**2 分 27 秒看懂怎么用 · 中文配音和字幕**
+
+https://github.com/user-attachments/assets/ac81b48e-0f21-484b-9d98-780d1fb15a10
+
+添加客户 → 更新聊天 → 三种回复操作 → 企业资料与回复设置 → 人工核对、复制发送。全部使用虚构数据演示。
+
+[下载视频 MP4](https://github.com/zhengshuyuan2023uk/inquiry-assistant/releases/download/sales-guide-r3/inquiry-assistant-sales-guide-r3.mp4) · [下载中文字幕](https://github.com/zhengshuyuan2023uk/inquiry-assistant/releases/download/sales-guide-r3/inquiry-assistant-sales-guide-r3.zh-CN.srt)
+
+## 版本与安装
+
 当前版本 **0.7.0a1 / Alpha**，适合一家公司、一台电脑的受控试点。源码运行于 macOS / Linux；工作区锁依赖 POSIX，暂不支持 Windows 原生运行。当前成品安装套件面向 Apple 芯片 Mac，要求 macOS 14 或以上，首次由实施人员协助安装。
 
 **业务员下载安装包：** [Mac 套件 r3 下载页](https://github.com/zhengshuyuan2023uk/inquiry-assistant-downloads/releases/tag/macos-arm64-0.7.0a1-r3) · [现场安装手册](docs/MAC_ONSITE.md)。`inquiry-assistant-0.7.0a1-macos-arm64-r3.zip` 是现场安装套件，包含本页介绍的企业资料表单与三部分回复设置；本仓库面向阅读、修改和构建源码的开发者。
-
-**业务员上手视频：** [新版工作台操作演示（约 2 分 27 秒，中文配音和字幕）](https://github.com/zhengshuyuan2023uk/inquiry-assistant/releases/tag/sales-guide-r3)。使用虚构数据演示添加客户、更新聊天、三种回复操作、企业资料和回复设置，以及核对后复制发送的流程。
 
 正式安装创建客户自己的空白工作区，不预置虚构客户、聊天或报价。下方合成演示是可选体验，使用同一套程序和独立演示工作区；不需要维护两套产品。
 
