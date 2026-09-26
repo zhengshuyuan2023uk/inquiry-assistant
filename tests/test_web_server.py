@@ -660,6 +660,181 @@ class WebServerTests(unittest.TestCase):
         self.assertTrue(self.request('/api/conversation?account=a&conversation=c')[1]['drafts'][0]['requires_recheck'])
         self.assertEqual(self.request('/api/adopt', {'draft_id': draft_id, 'final_text': 'Hello'})[0], 400)
 
+    def test_reply_settings_get_hides_only_exact_known_protected_rules(self):
+        template_root = Path(__file__).resolve().parents[1] / 'templates'
+        logistics = json.loads((template_root / 'logistics-demo.json').read_text())['rules']
+        trade = json.loads((template_root / 'trade-demo.json').read_text())['rules']
+        from inquiry_product.web_demo import _config
+        examples = [(logistics, [3, 4, 5]), (trade, [3, 4, 5]), (_config()['rules'], [3, 4, 5])]
+        for rules, editable_indices in examples:
+            with self.subTest(rules=rules[0]):
+                custom = '客户自定规则：不借用其他企业资料，但应保留我设置的措辞。'
+                near_match = rules[0] + '（企业补充）'
+                self.ws.publish(self.config | {'required_fields': ['quantity', '客户料号'],
+                                               'rules': rules + [custom, near_match]})
+                status, result, _ = self.request('/api/reply-settings')
+                self.assertEqual(status, 200, result)
+                self.assertEqual(result, {'text': '', 'required_fields': ['quantity', '客户料号'],
+                    'rules': [rules[index] for index in editable_indices] + [custom, near_match],
+                    'protected_rule_count': len(rules) - len(editable_indices),
+                    'active_release': self.ws.manifest['active_release']})
+
+    def test_reply_settings_preserve_protected_slots_and_unrelated_company_data(self):
+        protected = json.loads((Path(__file__).resolve().parents[1] / 'templates/logistics-demo.json').read_text())['rules']
+        config = self.config | {'rules': [protected[0], '先问数量', protected[1], '再问目的地', protected[7]],
+                                'reply_strategy': '原策略', 'custom_metadata': {'owner': '本企业资料'}}
+        self.ws.publish(config)
+        other = Workspace.init(self.root / 'other', 'beta', self.config | {'id': 'beta', 'name': '另一企业'})
+        other_before = (other.root / 'workspace.json').read_bytes()
+        before = self.request('/api/knowledge')[1]
+        payload = {'text': '简短回答，先核实客户型号。', 'required_fields': ['customer_sku_v2', '收货城市'],
+                   'rules': ['确认型号', '明确订单数量', '核实包装'], 'base_release': before['active_release']}
+        status, published, _ = self.request('/api/reply-settings', payload)
+        self.assertEqual(status, 200, published)
+        self.assertTrue(published['changed'])
+        saved = self.request('/api/knowledge')[1]
+        self.assertEqual(saved['config'], config | {
+            'reply_strategy': payload['text'], 'required_fields': payload['required_fields'],
+            'rules': [protected[0], '确认型号', protected[1], '明确订单数量', protected[7], '核实包装']})
+        self.assertEqual(saved['history'][:-1], before['history'])
+        self.assertEqual((other.root / 'workspace.json').read_bytes(), other_before)
+        for attempt in ({'company_id': 'beta'}, {'config': {'id': 'beta'}}, {'knowledge': []}):
+            status, error, _ = self.request('/api/reply-settings', payload | attempt)
+            self.assertEqual(status, 400, error)
+        self.assertEqual(self.request('/api/knowledge')[1], saved)
+
+    def test_reply_settings_clear_business_rules_adds_persistent_protected_fallback(self):
+        before = self.request('/api/reply-settings')[1]
+        payload = {'text': '', 'required_fields': ['数量'], 'rules': [], 'base_release': before.get('active_release', '')}
+        status, published, _ = self.request('/api/reply-settings', payload)
+        self.assertEqual(status, 200, published)
+        saved = self.request('/api/knowledge')[1]
+        self.assertEqual(len(saved['config']['rules']), 1)
+        settings = self.request('/api/reply-settings')[1]
+        self.assertEqual(settings['rules'], [])
+        self.assertEqual(settings['protected_rule_count'], 1)
+        status, repeated, _ = self.request('/api/reply-settings', payload | {'base_release': settings['active_release']})
+        self.assertEqual(status, 200, repeated)
+        self.assertFalse(repeated['changed'])
+        self.assertEqual(self.request('/api/knowledge')[1], saved)
+
+    def test_reply_settings_no_change_preserves_order_digest_and_optional_strategy(self):
+        protected = json.loads((Path(__file__).resolve().parents[1] / 'templates/logistics-demo.json').read_text())['rules'][1]
+        for strategy in (None, '', '  保留原策略排版。\n'):
+            with self.subTest(strategy=strategy):
+                config = self.config | {'rules': ['客户自定规则', protected, '其他业务约束'],
+                                        'required_fields': ['quantity', '客户料号']}
+                if strategy is not None:
+                    config['reply_strategy'] = strategy
+                self.ws.publish(config)
+                before = self.request('/api/knowledge')[1]
+                status, settings, _ = self.request('/api/reply-settings')
+                self.assertEqual(status, 200, settings)
+                payload = {key: settings[key] for key in ('text', 'required_fields', 'rules')}
+                status, result, _ = self.request('/api/reply-settings', payload | {'base_release': settings['active_release']})
+                self.assertEqual(status, 200, result)
+                self.assertFalse(result['changed'])
+                self.assertEqual(self.request('/api/knowledge')[1], before)
+
+    def test_reply_settings_reject_invalid_values_with_actionable_chinese_errors(self):
+        original = self.request('/api/knowledge')[1]
+        payload = {'text': '', 'required_fields': ['数量'], 'rules': ['企业规则'],
+                   'base_release': original['active_release']}
+        cases = [('required_fields', [], '至少'), ('required_fields', '数量', '列表'),
+                 ('required_fields', [''], '空白'), ('required_fields', ['数量', ' 数量 '], '重复'),
+                 ('required_fields', ['数量', 3], '文本'), ('rules', None, '列表'),
+                 ('rules', ['  '], '空白'), ('rules', ['核实', '核实'], '重复'),
+                 ('rules', [False], '文本'), ('text', 123, '文本'),
+                 ('text', 'a' * 12001, '12000'), ('text', '错误\x00内容', '控制字符')]
+        for key, value, message in cases:
+            with self.subTest(key=key, value=repr(value)[:80]):
+                status, error, _ = self.request('/api/reply-settings', payload | {key: value})
+                self.assertEqual(status, 400, error)
+                self.assertIn(message, error['error'])
+                self.assertEqual(self.request('/api/knowledge')[1], original)
+
+    def test_reply_settings_preserve_multiline_rules_when_unchanged_or_editing_preferences(self):
+        config = self.config | {'required_fields': ['quantity', ' 客户编号 '],
+                                'rules': ['下单前核实：\n\t数量和型号\r\n交期由人工确认'],
+                                'reply_strategy': '原沟通偏好'}
+        self.ws.publish(config)
+        before = self.request('/api/knowledge')[1]
+        settings = self.request('/api/reply-settings')[1]
+        payload = {key: settings[key] for key in ('text', 'required_fields', 'rules')}
+        payload['base_release'] = settings['active_release']
+        status, result, _ = self.request('/api/reply-settings', payload)
+        self.assertEqual(status, 200, result)
+        self.assertFalse(result['changed'])
+        self.assertEqual(self.request('/api/knowledge')[1], before)
+        status, result, _ = self.request('/api/reply-settings', payload | {'text': '先简短解释，再问细节。'})
+        self.assertEqual(status, 200, result)
+        self.assertEqual(self.request('/api/knowledge')[1]['config'],
+                         config | {'reply_strategy': '先简短解释，再问细节。'})
+
+    def test_reply_settings_preserve_existing_whitespace_distinct_arrays_without_weakening_new_validation(self):
+        protected = json.loads((Path(__file__).resolve().parents[1] / 'templates/logistics-demo.json').read_text())['rules'][1]
+        config = self.config | {'required_fields': ['SKU', ' SKU '],
+                                'rules': ['先核实', protected, ' 先核实 '],
+                                'reply_strategy': '原沟通偏好'}
+        self.ws.publish(config)
+        before = self.request('/api/knowledge')[1]
+        settings = self.request('/api/reply-settings')[1]
+        payload = {key: settings[key] for key in ('text', 'required_fields', 'rules')}
+        payload['base_release'] = settings['active_release']
+        status, result, _ = self.request('/api/reply-settings', payload)
+        self.assertEqual(status, 200, result)
+        self.assertFalse(result['changed'])
+        self.assertEqual(self.request('/api/knowledge')[1], before)
+        status, result, _ = self.request('/api/reply-settings', payload | {'text': '先询问客户型号。'})
+        self.assertEqual(status, 200, result)
+        saved = self.request('/api/knowledge')[1]
+        self.assertEqual(saved['config'], config | {'reply_strategy': '先询问客户型号。'})
+        for key, changed in [('required_fields', ['SKU', ' SKU ', '客户城市']),
+                             ('rules', ['先核实', ' 先核实 ', '确认目的地'])]:
+            with self.subTest(key=key):
+                status, error, _ = self.request('/api/reply-settings', payload | {
+                    key: changed, 'base_release': saved['active_release']})
+                self.assertEqual(status, 400, error)
+                self.assertIn('重复', error['error'])
+                self.assertEqual(self.request('/api/knowledge')[1], saved)
+
+    def test_reply_settings_change_invalidates_draft_and_conflicts_with_old_editors(self):
+        draft_id = self.wait_job(self.analyze())['draft_id']
+        before = self.request('/api/knowledge')[1]
+        payload = {'text': '每次先问一个问题。', 'required_fields': ['quantity', 'customer_sku'],
+                   'rules': ['样品价格需人工确认'], 'base_release': before['active_release']}
+        status, published, _ = self.request('/api/reply-settings', payload)
+        self.assertEqual(status, 200, published)
+        self.assertTrue(self.request('/api/conversation?account=a&conversation=c')[1]['drafts'][0]['requires_recheck'])
+        self.assertEqual(self.request('/api/adopt', {'draft_id': draft_id, 'final_text': '旧草稿'})[0], 400)
+        saved = self.request('/api/knowledge')[1]
+        for path, body in [('/api/reply-settings', payload),
+                           ('/api/knowledge', {'config': before['config'], 'base_release': before['active_release']}),
+                           ('/api/strategy', {'text': '过期策略', 'base_release': before['active_release']})]:
+            with self.subTest(path=path):
+                status, error, _ = self.request(path, body)
+                self.assertEqual(status, 400, error)
+                self.assertIn('重新载入', error['error'])
+                self.assertEqual(self.request('/api/knowledge')[1], saved)
+        newer = saved['config']
+        newer['knowledge'][0]['content'] = '另一页面最新的资料。'
+        self.assertEqual(self.request('/api/knowledge', {'config': newer, 'base_release': saved['active_release']})[0], 200)
+        current = self.request('/api/knowledge')[1]
+        status, error, _ = self.request('/api/reply-settings', payload | {'base_release': saved['active_release']})
+        self.assertEqual(status, 400, error)
+        self.assertEqual(self.request('/api/knowledge')[1], current)
+
+    def test_reply_settings_requires_authenticated_session_and_csrf(self):
+        original = self.request('/api/knowledge')[1]
+        payload = {'text': '精简', 'required_fields': ['数量'], 'rules': [],
+                   'base_release': original['active_release']}
+        self.assertEqual(self.request('/api/reply-settings', cookie=False)[0], 401)
+        self.assertEqual(self.request('/api/reply-settings', payload, cookie=False)[0], 401)
+        self.assertEqual(self.request('/api/reply-settings', payload, headers={'X-CSRF-Token': None})[0], 403)
+        self.assertEqual(self.request('/api/reply-settings', payload, headers={'Origin': 'https://example.org'})[0], 403)
+        self.assertEqual(self.request('/api/knowledge')[1], original)
+        self.assertEqual(self.request('/api/reply-settings')[0], 200)
+
     def test_old_knowledge_editor_cannot_overwrite_new_strategy(self):
         old = self.request('/api/knowledge')[1]
         status, _, _ = self.request('/api/strategy', {'text': '新的中文回复偏好', 'base_release': old['active_release']})

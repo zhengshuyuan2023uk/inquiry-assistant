@@ -143,9 +143,9 @@ test("document titles and bodies are escaped in the page and selector", async ()
   assert(!env.element("knowledge-content").innerHTML.includes("<script>")); assert(!env.element("knowledge-document").innerHTML.includes("<img"));
   assert.equal(env.element("knowledge-title").value, malicious.title);
 });
-test("empty page provides a direct add action", async () => {
+test("empty page provides a shared top-bar add action", async () => {
   const env = harness(snapshot([])); env.ui.state.page = "knowledge"; await env.ui.loadKnowledge();
-  await env.element("knowledge-empty-add").trigger("click");
+  await env.element("knowledge-add-page").trigger("click");
   assert.equal(env.element("knowledge-dialog").open, true); assert.equal(env.config().knowledge.length, 1);
 });
 test("card edit still selects the intended document when another page reordered documents", async () => {

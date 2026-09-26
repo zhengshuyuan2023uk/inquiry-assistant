@@ -25,6 +25,7 @@ from .core.config import ProjectConfig
 from .core.engine import CodexRunner, EngineError, normalize_request
 from .core.store import StoreError
 from .models import get_model_catalog
+from .reply_settings import read_settings, updated_config
 from .telemetry import start_run, finish_run, list_runs, recover_workbench_runs
 from .workspace import Workspace
 from .jobs import JobStore
@@ -706,6 +707,11 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             config = ProjectConfig.load(ws.configs_dir, ws.company_id).data
             self._json(200, {'text': config.get('reply_strategy', ''), 'active_release': ws.manifest['active_release']})
             return
+        if path == '/api/reply-settings':
+            ws = self.server.current_workspace()
+            config = ProjectConfig.load(ws.configs_dir, ws.company_id).data
+            self._json(200, read_settings(config, ws.manifest['active_release']))
+            return
         if path == '/api/sync':
             self._json(200, self.server.sync_status())
             return
@@ -734,7 +740,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
 
     def _post(self):
         path, _ = self._url()
-        if path not in ('/api/messages', '/api/analyze', '/api/jobs/cancel', '/api/review', '/api/adopt', '/api/knowledge', '/api/strategy', '/api/sync', '/api/import', '/api/customers/scan', '/api/customers/selection', '/api/shutdown'):
+        if path not in ('/api/messages', '/api/analyze', '/api/jobs/cancel', '/api/review', '/api/adopt', '/api/knowledge', '/api/strategy', '/api/reply-settings', '/api/sync', '/api/import', '/api/customers/scan', '/api/customers/selection', '/api/shutdown'):
             raise APIError(404, '接口不存在')
         data = self._body()
         if path == '/api/shutdown':
@@ -846,6 +852,14 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 config['reply_strategy'] = strategy.strip()
             else:
                 config.pop('reply_strategy', None)
+            self._json(200, ws.publish(config, expected_release=base))
+            return
+        if path == '/api/reply-settings':
+            _shape(data, ('text', 'required_fields', 'rules', 'base_release'))
+            base = _text(data['base_release'], '资料版本', 64)
+            ws = self.server.current_workspace()
+            config = ProjectConfig.load(ws.configs_dir, ws.company_id).data
+            config = updated_config(config, data['text'], data['required_fields'], data['rules'])
             self._json(200, ws.publish(config, expected_release=base))
             return
         if path == '/api/import':

@@ -5,12 +5,13 @@
   const statusLabels = { needs_sync: "待更新聊天", needs_analysis: "待生成回复", pending: "有可用回复", approved: "已采用", rejected: "历史回复", stale: "需重新生成" };
   state.customers = { snapshot: null, selected: new Set(), baseline: new Set(), scanning: false, saving: false, valid: false, error: "", saved: false, discardAction: null };
   state.knowledgeEditor = { baseline: "", release: null, loading: false, saving: false, conflict: false, confirmAction: null };
+  state.replySettings = { baseline: "", release: null, fields: [], customFields: [], rules: [], loaded: false, loading: false, saving: false, conflict: false, version: 0, confirmAction: null };
   const fieldLabels = { origin:"起运地", destination:"目的地", goods:"货物", quantity:"数量", weight_kg:"毛重", volume_cbm:"体积", transport_mode:"运输方式", deadline:"期望交付", product:"产品", specification:"规格" };
   const languages = { auto:"跟随客户", en:"英语", es:"西班牙语", fr:"法语", de:"德语", pt:"葡萄牙语", ar:"阿拉伯语", zh:"中文", ja:"日语", ko:"韩语", it:"意大利语", ru:"俄语" };
   const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
   const key = (item) => item ? JSON.stringify([item.account_id,item.conversation_id]) : null;
   const same = (a,b) => key(a) === key(b);
-  const label = (field) => fieldLabels[field] || field;
+  const label = (field) => Object.hasOwn(fieldLabels, field) ? fieldLabels[field] : field;
   const isRunning = (job) => !!job && ["queued","running","cancelling"].includes(job.status);
   const currentDraft = () => state.detail?.drafts?.find((draft) => draft.id === state.draftChoices.get(key(state.selected))) || state.detail?.drafts?.[0] || null;
   const stale = (draft) => !!draft && (draft.requires_recheck || draft.status === "stale");
@@ -66,7 +67,26 @@
     finally{if(version===state.modelsVersion){state.modelsLoading=false;renderJob();}}
   }
   function setPane(pane){ document.querySelector(".inbox-grid").dataset.mobilePane=pane; document.querySelectorAll("[data-pane]").forEach(button=>{button.classList.toggle("active",button.dataset.pane===pane);button.setAttribute("aria-pressed",String(button.dataset.pane===pane));}); }
-  async function setPage(page){state.page=page;const version=++state.pageVersion;document.querySelectorAll(".main-nav [data-page]").forEach(button=>{const active=button.dataset.page===page;button.classList.toggle("active",active);if(active)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current");});for(const name of ["inbox","knowledge","strategy","activity"])$("page-"+name).hidden=name!==page;if(page==="knowledge")await loadKnowledge(version);if(page==="activity")await loadActivity(version);if(page==="strategy")await loadStrategy();}
+  async function setPage(page) {
+    if (state.replySettings.saving || knowledgeBusy()) { toast("正在保存或载入，请稍候再切换。"); return; }
+    if (page !== state.page && replySettingsDirty()) {
+      confirmReplyDiscard("切换页面将放弃尚未保存的回复设置。", async () => { restoreReplyBaseline(); await showPage(page); }); return;
+    }
+    if (knowledgeDirty()) {
+      confirmKnowledge("切换页面将放弃尚未保存的企业资料。", "放弃修改并切换", async () => { $("knowledge-dialog").close(); await showPage(page); }); return;
+    }
+    if ($("knowledge-dialog").open) $("knowledge-dialog").close();
+    await showPage(page);
+  }
+  async function showPage(page) {
+    if (state.page === "strategy" && page !== "strategy" && state.replySettings.loading) {
+      state.replySettings.version++; state.replySettings.loading = false;
+    }
+    state.page=page;const version=++state.pageVersion;
+    document.querySelectorAll(".main-nav [data-page]").forEach(button=>{const active=button.dataset.page===page;button.classList.toggle("active",active);if(active)button.setAttribute("aria-current","page");else button.removeAttribute("aria-current");});
+    for(const name of ["inbox","knowledge","strategy","activity"])$("page-"+name).hidden=name!==page;
+    if(page==="knowledge")await loadKnowledge(version);if(page==="activity")await loadActivity(version);if(page==="strategy")await loadStrategy();
+  }
   function filteredConversations(){const query=$("conversation-search").value.trim().toLocaleLowerCase();const filter=$("status-filter").value;return state.conversations.filter(item=>(filter==="all"||item.status===filter)&&(!query||[item.title,item.subtitle,item.preview].join(" ").toLocaleLowerCase().includes(query))).sort((a,b)=>Number(state.newScopes.has(key(b)))-Number(state.newScopes.has(key(a))));}
   function renderConversations(){const items=filteredConversations();$("conversation-count").textContent=state.conversations.length;$("visible-count").textContent=items.length===state.conversations.length?"最近会话":`${items.length} 条结果`;if(!items.length){$("conversation-list").innerHTML=empty(state.conversations.length?"没有匹配的客户":"还没有聊天记录",state.conversations.length?"换个关键词，或切换筛选条件。":"先更新聊天，或从更多操作导入记录。",state.conversations.length?'<button class="button secondary small" id="clear-filters">清除筛选</button>':"");$("clear-filters")?.addEventListener("click",()=>{$("conversation-search").value="";$("status-filter").value="all";renderConversations();});return;}
     $("conversation-list").innerHTML=items.map((item,index)=>`<button class="conversation-item ${same(item,state.selected)?"active":""}" data-index="${index}" aria-pressed="${same(item,state.selected)}"><span class="contact-avatar tone-${state.conversations.indexOf(item)%4}">${escape(initials(item.title))}</span><span class="conversation-details"><span class="conversation-title-row"><strong>${escape(item.title)}</strong><time>${escape(time(item.last_at))}</time></span><span class="conversation-subtitle">${escape(item.subtitle||"客户会话")}</span><span class="conversation-preview">${escape(item.preview||"暂无消息正文")}</span><span class="conversation-status-row">${state.updatedScopes.has(key(item))?'<span class="badge updated">新消息</span>':badge(item.status)}<span>${Number(item.message_count)||0} 条</span></span></span></button>`).join("");$("conversation-list").querySelectorAll("[data-index]").forEach(button=>button.addEventListener("click",()=>{selectConversation(items[Number(button.dataset.index)]);setPane("work");}));}
@@ -435,8 +455,110 @@
   function openMore(){$("simulation-open").hidden=state.bootstrap?.company.mode!=="simulation";$("simulation-open").disabled=!state.selected;$("more-dialog").showModal();}
   function openMessage(){$("more-dialog").close();if(!state.selected||state.bootstrap.company.mode!=="simulation")return;state.messageTarget={...state.selected};$("message-target").textContent=`添加到 ${state.selected.title} 的演练会话，不会向客户发送。`;$("message-body").value=state.messageEdits.get(key(state.messageTarget))||"";formError("message-error");$("message-dialog").showModal();}
   async function addMessage(event){event.preventDefault();const target=state.messageTarget;if(!target||state.busyMessage)return;const body=$("message-body").value.trim();if(!body)return;state.busyMessage=true;$("message-submit").disabled=true;formError("message-error");try{await api("/api/messages",{account_id:target.account_id,conversation_id:target.conversation_id,body});state.messageEdits.delete(key(target));$("message-dialog").close();toast("演练消息已添加，旧回复需要重新生成。");await refreshConversations();if(same(state.selected,target))await selectConversation(state.selected);}catch(error){formError("message-error",error.message);}finally{state.busyMessage=false;$("message-submit").disabled=false;}}
-  async function loadStrategy(){if(state.strategyDirty&&state.strategyRelease)return;const version=++state.strategyVersion;formError("strategy-error");$("strategy-submit").disabled=true;try{const result=await api("/api/strategy");if(version!==state.strategyVersion)return;state.strategyRelease=result.active_release;$("strategy-text").value=result.text||"";state.strategyDirty=false;$("strategy-state").textContent="当前策略已载入";$("strategy-submit").disabled=false;}catch(error){formError("strategy-error",error.message);$("strategy-state").textContent="策略读取未完成";}}
-  async function saveStrategy(event){event.preventDefault();if(!state.strategyRelease)return;const text=$("strategy-text").value;$("strategy-submit").disabled=true;formError("strategy-error");try{const result=await api("/api/strategy",{text,base_release:state.strategyRelease});state.strategyRelease=result.release_id||result.active_release||state.strategyRelease;state.strategyDirty=false;$("strategy-state").textContent="已保存 · 后续回复按此策略生成";toast(result.changed===false?"策略没有变化。":"回复策略已保存，旧回复需重新生成。");await refreshConversations();if(state.selected)await selectConversation(state.selected,true);}catch(error){formError("strategy-error",error.message);}finally{$("strategy-submit").disabled=false;}}
+  function replyPayload() {
+    return { text: $("strategy-text").value, required_fields: [...state.replySettings.fields], rules: [...state.replySettings.rules] };
+  }
+  function replySettingsDirty() {
+    return state.replySettings.loaded && (JSON.stringify(replyPayload()) !== state.replySettings.baseline || !!$("reply-custom-field").value.trim());
+  }
+  const replySettingsLocked = () => state.replySettings.loading || state.replySettings.saving || !!state.replySettings.confirmAction || !state.replySettings.loaded;
+  const replyFieldKeys = () => [...Object.keys(fieldLabels), ...state.replySettings.customFields];
+  function renderReplySettingsControls() {
+    const editor = state.replySettings, locked = replySettingsLocked();
+    for (const id of ["strategy-text", "reply-custom-field", "reply-field-add", "reply-rule-add"]) $(id).disabled = locked;
+    replyFieldKeys().forEach((key, index) => { if ($("reply-field-" + index)) $("reply-field-" + index).disabled = locked; });
+    editor.rules.forEach((rule, index) => { $("reply-rule-" + index).disabled = locked; $("reply-rule-remove-" + index).disabled = locked; });
+    $("strategy-submit").disabled = locked || editor.conflict;
+    $("strategy-submit").textContent = editor.saving ? "正在保存…" : "保存回复设置";
+    $("reply-settings-reload").disabled = editor.loading || editor.saving || !!editor.confirmAction;
+    $("strategy-state").textContent = editor.loading ? "正在读取设置…" : editor.saving ? "正在保存，请稍候。" : editor.conflict ? "其他页面已更新，请重新载入后编辑。" : !editor.loaded ? "未能读取设置，请重新载入。" : replySettingsDirty() ? "有未保存的修改" : "当前设置已保存";
+  }
+  function renderReplyFields() {
+    const keys = replyFieldKeys();
+    $("reply-required-fields").innerHTML = keys.map((key, index) => `<label class="reply-field-choice"><input type="checkbox" id="reply-field-${index}"><span>${escape(label(key))}${Object.hasOwn(fieldLabels, key) ? "" : '<small>自定义</small>'}</span></label>`).join("");
+    keys.forEach((key, index) => {
+      const input = $("reply-field-" + index); input.dataset.requiredField = key; input.checked = state.replySettings.fields.includes(key);
+      input.addEventListener("change", () => {
+        if (replySettingsLocked()) { input.checked = state.replySettings.fields.includes(key); return; }
+        if (input.checked && !state.replySettings.fields.includes(key)) state.replySettings.fields.push(key);
+        else if (!input.checked) state.replySettings.fields = state.replySettings.fields.filter(field => field !== key);
+        renderReplySettingsControls();
+      });
+    });
+  }
+  function renderReplyRules() {
+    $("reply-rules").innerHTML = state.replySettings.rules.map((rule, index) => `<div class="reply-rule-row"><div><label class="form-label" for="reply-rule-${index}">确认事项 ${index + 1}</label><textarea class="text-input" id="reply-rule-${index}" rows="2" placeholder="例如：特殊包装需确认后再报价"></textarea></div><button class="button secondary small" type="button" id="reply-rule-remove-${index}" aria-label="移除确认事项 ${index + 1}">移除</button></div>`).join("") || '<p class="reply-rules-empty">暂未添加额外确认事项，可按实际业务补充。</p>';
+    state.replySettings.rules.forEach((rule, index) => {
+      $("reply-rule-" + index).value = rule;
+      $("reply-rule-" + index).addEventListener("input", event => { if (!replySettingsLocked()) { state.replySettings.rules[index] = event.target.value; renderReplySettingsControls(); } });
+      $("reply-rule-remove-" + index).addEventListener("click", () => { if (replySettingsLocked()) return; state.replySettings.rules.splice(index, 1); renderReplyRules(); renderReplySettingsControls(); });
+    });
+  }
+  function applyReplySettings(data) {
+    const editor = state.replySettings;
+    editor.fields = [...data.required_fields]; editor.customFields = data.required_fields.filter(key => !Object.hasOwn(fieldLabels, key)); editor.rules = [...data.rules];
+    $("strategy-text").value = data.text; $("reply-custom-field").value = "";
+    editor.release = data.active_release; editor.loaded = true; editor.conflict = false;
+    editor.baseline = JSON.stringify(replyPayload()); renderReplyFields(); renderReplyRules();
+  }
+  function restoreReplyBaseline() {
+    if (state.replySettings.baseline) applyReplySettings({ ...JSON.parse(state.replySettings.baseline), active_release: state.replySettings.release });
+    renderReplySettingsControls();
+  }
+  async function loadStrategy({ force = false } = {}) {
+    const editor = state.replySettings;
+    if (editor.loading || editor.saving || (replySettingsDirty() && !force)) return;
+    const version = ++editor.version; editor.loading = true; formError("strategy-error"); renderReplySettingsControls();
+    try {
+      const data = await api("/api/reply-settings");
+      if (version !== editor.version || state.page !== "strategy") return;
+      if (typeof data.text !== "string" || !Array.isArray(data.required_fields) || !data.required_fields.every(item => typeof item === "string") || !Array.isArray(data.rules) || !data.rules.every(item => typeof item === "string") || !data.active_release) throw new Error("回复设置格式不完整，请重新载入。");
+      applyReplySettings(data);
+    } catch (error) { if (version === editor.version) formError("strategy-error", error.message + (editor.loaded ? " 当前输入已保留。" : "")); }
+    finally { if (version === editor.version) { editor.loading = false; renderReplySettingsControls(); } }
+  }
+  function confirmReplyDiscard(message, action) {
+    if (state.replySettings.saving || state.replySettings.loading) return;
+    state.replySettings.confirmAction = action; $("reply-discard-message").textContent = message;
+    renderReplySettingsControls(); if (!$("reply-settings-discard").open) $("reply-settings-discard").showModal(); $("reply-discard-keep").focus();
+  }
+  async function resolveReplyDiscard(accept) {
+    const action = state.replySettings.confirmAction;
+    state.replySettings.confirmAction = null; $("reply-settings-discard").close(); renderReplySettingsControls();
+    if (accept && action) await action();
+  }
+  function reloadReplySettings() {
+    if (state.replySettings.loading || state.replySettings.saving || state.replySettings.confirmAction) return;
+    if (replySettingsDirty()) confirmReplyDiscard("重新载入会放弃尚未保存的回复设置。需要保留的内容请先复制。", () => loadStrategy({ force: true }));
+    else return loadStrategy({ force: true });
+  }
+  function addReplyField() {
+    if (replySettingsLocked()) return;
+    const value = $("reply-custom-field").value.trim();
+    if (!value) { formError("strategy-error", "先填写需要补充的问题名称。"); return; }
+    const matched = Object.entries(fieldLabels).find(([key, name]) => value === key || value === name);
+    const key = matched ? matched[0] : value;
+    if (!Object.hasOwn(fieldLabels, key) && !state.replySettings.customFields.includes(key)) state.replySettings.customFields.push(key);
+    if (!state.replySettings.fields.includes(key)) state.replySettings.fields.push(key);
+    $("reply-custom-field").value = ""; formError("strategy-error"); renderReplyFields(); renderReplySettingsControls();
+  }
+  async function saveStrategy(event) {
+    event.preventDefault(); const editor = state.replySettings;
+    if (replySettingsLocked() || editor.conflict) return;
+    formError("strategy-error"); const payload = replyPayload();
+    if ($("reply-custom-field").value.trim()) { formError("strategy-error", "还有未添加的自定义问题，请先点击添加或清空输入。"); return; }
+    if (!payload.required_fields.length) { formError("strategy-error", "至少勾选一项需要了解的信息。"); return; }
+    if (payload.rules.some(rule => !rule.trim())) { formError("strategy-error", "确认事项不能为空，请填写内容或移除空白项。"); return; }
+    if (new Set(payload.rules).size !== payload.rules.length) { formError("strategy-error", "确认事项有重复内容，请合并后保存。"); return; }
+    editor.saving = true; renderReplySettingsControls(); let result;
+    try { result = await api("/api/reply-settings", { ...payload, base_release: editor.release }); }
+    catch (error) { editor.conflict = error.status === 409 || /其他页面更新|版本冲突/.test(error.message); formError("strategy-error", error.message + " 当前输入已保留。"); return; }
+    finally { editor.saving = false; renderReplySettingsControls(); }
+    editor.release = result.release_id || result.active_release || editor.release; editor.baseline = JSON.stringify(payload); renderReplySettingsControls();
+    toast(result.changed === false ? "设置没有变化，当前版本已保留。" : "回复设置已保存，已有回复需重新核查。");
+    try { await refreshConversations(); if (state.selected) await selectConversation(state.selected, true); }
+    catch (error) { toast(`回复设置已保存，但页面刷新未完成。请重新载入工作台。${error.message}`, true); }
+  }
   function validity(document){const today=state.bootstrap?.as_of||new Date().toISOString().slice(0,10);if(document.valid_until<today)return["expired","已过期"];if(document.valid_from>today)return["fixture","尚未生效"];return["valid","当前有效"];}
   async function loadKnowledge(version = state.pageVersion) {
     $("knowledge-content").innerHTML = loading("读取企业资料中");
@@ -447,12 +569,12 @@
       const config = data.config;
       const docs = config.knowledge || [];
       const history = data.history || [];
-      $("knowledge-content").innerHTML = `<div class="knowledge-layout"><div class="knowledge-documents">${docs.length ? docs.map((document, index) => {
+      $("knowledge-content").innerHTML = `<div class="knowledge-document-grid">${docs.length ? docs.map((document, index) => {
         const [className, text] = validity(document);
-        return `<article class="content-card"><div class="knowledge-card-head"><div><h3>${escape(document.title)}</h3><p class="knowledge-key">${escape(document.id)} · 版本 ${escape(document.version)}</p></div><span class="badge ${className}">${text}</span></div><p class="knowledge-copy">${escape(document.content)}</p><div class="knowledge-validity"><span>生效 ${escape(document.valid_from)}</span><span>至 ${escape(document.valid_until)}</span>${className !== "valid" ? '<span>不会用于当前回复分析</span>' : ""}</div><div class="knowledge-card-actions"><button class="button secondary small" id="knowledge-edit-${index}">编辑资料</button></div></article>`;
-      }).join("") : empty("还没有企业资料", "从一份已确认的产品或服务资料开始，为回复提供依据。", '<button class="button primary small" id="knowledge-empty-add">＋ 新增第一份资料</button>')}</div><aside class="knowledge-sidebar"><section class="content-card"><div class="card-heading"><h3>回复规则</h3><span>${(config.rules || []).length} 条</span></div><ul class="rules-list">${(config.rules || []).map((rule, index) => `<li><span class="rule-marker">RULE ${String(index + 1).padStart(2, "0")}</span>${escape(rule)}</li>`).join("")}</ul></section><section class="content-card"><div class="card-heading"><h3>询盘必备信息</h3></div><div class="knowledge-fields">${(config.required_fields || []).map((field) => `<span>${escape(label(field))}</span>`).join("")}</div></section><section class="content-card"><div class="card-heading"><h3>资料发布记录</h3><span>${history.length} 次</span></div><ul class="release-list">${history.slice().reverse().slice(0, 10).map((item) => `<li><strong>${escape(item.action === "rollback" ? "恢复历史资料" : "发布资料")}</strong><br>${escape(time(item.published_at || item.created_at || item.at || item.timestamp, true))}<br>版本 ${escape(String(item.release_id || item.release || "").slice(0, 10) || "当前版本")}</li>`).join("") || '<li>当前资料已加载</li>'}</ul></section></aside></div>`;
+        const content = String(document.content || ""), summary = content.length > 200 ? content.slice(0, 200) + "…" : content;
+        return `<article class="content-card"><div class="knowledge-card-head"><h3>${escape(document.title)}</h3><span class="badge ${className}">${text}</span></div><p class="knowledge-copy knowledge-summary">${escape(summary)}</p><div class="knowledge-validity"><span>${escape(document.valid_from)} — ${escape(document.valid_until)}</span></div><div class="knowledge-card-actions"><button class="button secondary small" id="knowledge-edit-${index}">编辑资料</button></div></article>`;
+      }).join("") : empty("还没有企业资料", "点击右上方“新增资料”，从一份已确认的产品或服务资料开始。")}</div><details class="knowledge-history"><summary>资料更新记录 · ${history.length} 次</summary><ul class="release-list">${history.slice().reverse().slice(0, 10).map(item => `<li><strong>${escape(item.action === "rollback" ? "恢复历史资料" : "更新资料")}</strong> · ${escape(time(item.published_at || item.created_at || item.at || item.timestamp, true))}<br>版本 ${escape(String(item.release_id || item.release || "").slice(0, 10) || "当前版本")}</li>`).join("") || '<li>当前资料已加载</li>'}</ul></details>`;
       docs.forEach((document, index) => $("knowledge-edit-" + index).addEventListener("click", () => openKnowledge({ documentId: document.id })));
-      $("knowledge-empty-add")?.addEventListener("click", () => openKnowledge({ add: true }));
     } catch (error) {
       if (state.page === "knowledge" && version === state.pageVersion) {
         $("knowledge-content").innerHTML = empty("无法读取企业知识", error.message, '<button class="button secondary small" id="retry-knowledge">重新载入</button>');
@@ -525,7 +647,7 @@
   function renderKnowledgeControls() {
     const editor = state.knowledgeEditor, locked = knowledgeBusy() || !!editor.confirmAction;
     for (const id of ["knowledge-document", "knowledge-add", "knowledge-remove", "knowledge-title", "knowledge-content-editor", "knowledge-version", "knowledge-from", "knowledge-until", "knowledge-json", "knowledge-file", "knowledge-validate", "knowledge-reload"]) $(id).disabled = locked;
-    for (const id of ["knowledge-open", "knowledge-add-page", "knowledge-close", "knowledge-cancel"]) $(id).disabled = knowledgeBusy();
+    for (const id of ["knowledge-advanced-open", "knowledge-add-page", "knowledge-close", "knowledge-cancel"]) $(id).disabled = knowledgeBusy();
     $("knowledge-submit").disabled = locked || editor.conflict;
     $("knowledge-submit").textContent = editor.saving ? "正在保存…" : "保存并发布";
     $("knowledge-confirm").hidden = !editor.confirmAction;
@@ -539,7 +661,7 @@
     if (!config || typeof config !== "object" || Array.isArray(config) || !Array.isArray(config.knowledge)) throw new Error("知识配置需要包含 knowledge 资料列表，请检查高级配置。");
     return config;
   }
-  async function readKnowledgeEditor({ add = false, documentId = null } = {}) {
+  async function readKnowledgeEditor({ add = false, documentId = null, advanced = state.knowledgeEditor.advanced } = {}) {
     if (knowledgeBusy()) return;
     state.knowledgeEditor.loading = true; renderKnowledgeControls();
     try {
@@ -548,6 +670,9 @@
       state.knowledgeEditor.baseline = JSON.stringify(data.config);
       state.knowledgeEditor.release = data.active_release;
       state.knowledgeEditor.conflict = false;
+      state.knowledgeEditor.advanced = !!advanced;
+      $("knowledge-advanced").hidden = !advanced; $("knowledge-advanced").open = !!advanced;
+      $("knowledge-dialog-title").textContent = advanced ? "高级资料维护" : "维护企业资料";
       $("knowledge-json").value = JSON.stringify(data.config, null, 2);
       const index = documentId ? data.config.knowledge.findIndex(item => item.id === documentId) : 0;
       populateKnowledgeFields(Math.max(0, index));
@@ -565,7 +690,9 @@
   }
   async function openKnowledge(options = {}) {
     if ($("knowledge-dialog").open || knowledgeBusy()) return;
-    await readKnowledgeEditor(options);
+    if (state.replySettings.loading || state.replySettings.saving) { toast("正在读取或保存回复设置，请稍候。"); return; }
+    if (replySettingsDirty()) { confirmReplyDiscard("打开资料维护将放弃尚未保存的回复设置。", () => { restoreReplyBaseline(); return openKnowledge(options); }); return; }
+    await readKnowledgeEditor({ advanced: false, ...options });
   }
   function populateKnowledgeFields(selectedIndex = null) {
     let config;
@@ -745,14 +872,14 @@
     $("simulation-open").addEventListener("click",openMessage);$("activity-open").addEventListener("click",()=>{$("more-dialog").close();setPage("activity");});
     $("message-form").addEventListener("submit",addMessage);$("message-body").addEventListener("input",event=>{if(state.messageTarget)state.messageEdits.set(key(state.messageTarget),event.target.value);});
     $("import-open").addEventListener("click",()=>{$("more-dialog").close();openImport();});$("import-form").addEventListener("submit",importRecords);$("import-file").addEventListener("change",()=>{if(!$("import-source").value&&$("import-file").files[0])$("import-source").value=$("import-file").files[0].name.replace(/\.json$/i,"").slice(0,120);});
-    $("knowledge-open").addEventListener("click",()=>openKnowledge());$("knowledge-form").addEventListener("submit",publishKnowledge);
+    $("knowledge-advanced-open").addEventListener("click",()=>{$("manager-settings-dialog").close();return openKnowledge({advanced:true});});$("knowledge-form").addEventListener("submit",publishKnowledge);
     $("knowledge-add-page").addEventListener("click",()=>openKnowledge({add:true}));
     $("knowledge-add").addEventListener("click",addKnowledgeDocument); $("knowledge-remove").addEventListener("click",removeKnowledgeDocument);
     $("knowledge-close").addEventListener("click",closeKnowledge); $("knowledge-cancel").addEventListener("click",closeKnowledge);
     $("knowledge-dialog").addEventListener("cancel",event=>{event.preventDefault();closeKnowledge();});
     $("knowledge-confirm-keep").addEventListener("click",()=>resolveKnowledgeConfirm(false)); $("knowledge-confirm-accept").addEventListener("click",()=>resolveKnowledgeConfirm(true));
     $("knowledge-reload").addEventListener("click",reloadKnowledgeEditor);
-    globalThis.addEventListener?.("beforeunload",event=>{if(knowledgeDirty()||state.knowledgeEditor.saving){event.preventDefault();event.returnValue="";}});
+    globalThis.addEventListener?.("beforeunload",event=>{if(knowledgeDirty()||state.knowledgeEditor.saving||replySettingsDirty()||state.replySettings.saving){event.preventDefault();event.returnValue="";}});
     $("knowledge-validate").addEventListener("click",()=>{formError("knowledge-error");try{const config=validateKnowledge();$("knowledge-validation").textContent=`格式与企业归属通过，包含 ${config.knowledge.length} 份资料。发布时进一步校验。`;}catch(error){$("knowledge-validation").textContent="";formError("knowledge-error",error.message);}});
     $("knowledge-json").addEventListener("input",()=>{if(knowledgeBusy()||state.knowledgeEditor.confirmAction)return;$("knowledge-validation").textContent="";populateKnowledgeFields();});$("knowledge-document").addEventListener("change",()=>{if(!knowledgeBusy()&&!state.knowledgeEditor.confirmAction)loadKnowledgeFields();});
     for(const id of ["knowledge-title","knowledge-content-editor","knowledge-version","knowledge-from","knowledge-until"])$(id).addEventListener("input",updateKnowledgeFields);
@@ -766,7 +893,16 @@
       const apply=()=>{$("knowledge-json").value=JSON.stringify(config,null,2);populateKnowledgeFields(0);$("knowledge-validation").textContent="文件已载入，尚未发布。";};
       if(knowledgeDirty())confirmKnowledge("载入文件将替换当前全部未保存修改。需要保留的内容请先复制。", "放弃修改并载入", apply);else apply();
     });
-    $("strategy-form").addEventListener("submit",saveStrategy);$("strategy-text").addEventListener("input",()=>{state.strategyDirty=true;$("strategy-state").textContent="有未保存的修改";});$("refresh-activity").addEventListener("click",()=>loadActivity());
+    $("strategy-form").addEventListener("submit",saveStrategy);
+    $("strategy-text").addEventListener("input",()=>{if(!replySettingsLocked())renderReplySettingsControls();});
+    $("reply-custom-field").addEventListener("input",()=>{if(!replySettingsLocked())renderReplySettingsControls();});
+    $("reply-custom-field").addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();addReplyField();}});
+    $("reply-field-add").addEventListener("click",addReplyField);
+    $("reply-rule-add").addEventListener("click",()=>{if(replySettingsLocked())return;state.replySettings.rules.push("");renderReplyRules();renderReplySettingsControls();$("reply-rule-"+(state.replySettings.rules.length-1)).focus();});
+    $("reply-settings-reload").addEventListener("click",reloadReplySettings);
+    $("reply-discard-keep").addEventListener("click",()=>resolveReplyDiscard(false));$("reply-discard-confirm").addEventListener("click",()=>resolveReplyDiscard(true));
+    $("reply-settings-discard").addEventListener("cancel",event=>{event.preventDefault();resolveReplyDiscard(false);});
+    $("refresh-activity").addEventListener("click",()=>loadActivity());
   }
   async function initialize(){ $("global-error").hidden=true;try{state.bootstrap=await api("/api/bootstrap");$("company-name").textContent=state.bootstrap.company.name;$("mode-badge").textContent=state.bootstrap.company.mode==="simulation"?"演练模式":"客户工作区";$("workspace-note").textContent=state.bootstrap.company.mode==="simulation"?"虚构数据 · 可放心演练":"独立企业工作区";state.sync=state.bootstrap.sync||null;if(state.sync)renderSync();else await loadSync();state.activeJob=state.bootstrap.active_job;await Promise.all([loadModels(),refreshConversations(true)]);renderJob();if(isRunning(state.activeJob))watchJob(state.activeJob);else if(state.bootstrap.recent_jobs?.[0]?.status==="interrupted")toast("上次生成已中断，原稿仍保留。选择客户后可以重新生成。",true);}catch(error){$("company-name").textContent="工作区未连接";$("mode-badge").textContent="未连接";$("global-error").innerHTML=`${escape(error.message)} <button id="retry-bootstrap">重新连接</button>`;$("global-error").hidden=false;$("retry-bootstrap").addEventListener("click",initialize);$("conversation-list").innerHTML=empty("工作区未连接","确认工作台已启动，再点击重新连接。");}}
   bindEvents();setPane("list");initialize();
