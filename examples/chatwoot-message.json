@@ -1,0 +1,28 @@
+[
+  {
+    "event": "message_created",
+    "id": 50001,
+    "account": {"id": 101, "name": "虚构测试账号"},
+    "inbox": {"id": 201, "name": "虚构测试收件箱"},
+    "conversation": {"id": 30001, "account_id": 101, "inbox_id": 201},
+    "message_type": "incoming",
+    "private": false,
+    "content_type": "text",
+    "content": "虚构演练：我想了解从中国发货的服务，需要提供哪些资料？",
+    "created_at": "2026-09-25T09:00:00+08:00",
+    "attachments": []
+  },
+  {
+    "event": "message_created",
+    "id": 50002,
+    "account": {"id": 101, "name": "虚构测试账号"},
+    "inbox": {"id": 201, "name": "虚构测试收件箱"},
+    "conversation": {"id": 30001, "account_id": 101, "inbox_id": 201},
+    "message_type": "outgoing",
+    "private": false,
+    "content_type": "text",
+    "content": "虚构演练：请提供货物品名、预计重量体积、起运地及目的地。",
+    "created_at": "2026-09-25T09:05:00+08:00",
+    "attachments": []
+  }
+]

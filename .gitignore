@@ -1,0 +1,26 @@
+# Customer state, credentials and local evidence stay outside version control.
+/workspaces/
+/reports/
+/dist/
+/backups/
+/output/
+/workspace/
+/logs/
+/codex-home/
+/bridge_run/
+store/
+/.playwright-cli/
+**/__pycache__/
+*.py[cod]
+*.db
+*.db-*
+*.sqlite*
+*.log
+.DS_Store
+.env
+.env.*
+.codex/
+auth.json
+credentials*.json
+*.pem
+*.key

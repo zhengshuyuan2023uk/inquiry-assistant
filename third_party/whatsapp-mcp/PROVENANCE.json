@@ -1,0 +1,15 @@
+{
+  "upstream": "https://github.com/lharries/whatsapp-mcp",
+  "upstream_commit": "7d6a06dcdce1f01dfb24f60e1030d5efba9f3b88",
+  "source_description": "Locally patched source snapshot based on the upstream commit; these build inputs are not claimed to be identical to that commit. Exact imported input bytes were verified against the previously validated bridge build manifest.",
+  "modifications": [
+    "Updated pinned WhatsMeow and related dependencies for connection compatibility.",
+    "The pinned bridge input is retained in this snapshot; the build script removes the original REST API and main function and adds the Inquiry Assistant authenticated loopback control entry point."
+  ],
+  "source_input_sha256": {
+    "main.go": "2b65f5c9762699e774b91cf39c1539751516ba359ff846fd29a3f36f80bc7cf6",
+    "go.mod": "94e4720cd316119998706a53bf1f8e02a2026422c25c62d8034220c4770509cb",
+    "go.sum": "0fc74a48a13f6503ba6711d0415b6ccc2dbf8e48f3c8851db43241fddb2ae736"
+  },
+  "license_sha256": "86861f8ef4b108e301646f0f599eda922838d14c20303115c243338a70f9c3a0"
+}

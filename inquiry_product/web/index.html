@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#152a38">
+<title>询盘助手 · 销售工作台</title><link rel="stylesheet" href="/styles.css"><script src="/app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">跳到工作区</a>
+<div class="app-shell">
+<aside class="sidebar" aria-label="主导航">
+  <div class="brand" title="询盘助手"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M6 8h20v13H15l-7 5v-5H6V8Z" stroke="currentColor" stroke-width="2"/><path d="M12 13h8M12 17h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>询盘助手</span></div>
+  <nav class="main-nav">
+    <button class="nav-item active" data-page="inbox" aria-current="page"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5h16v12h-6l-4 3v-3H4V5Z" stroke="currentColor" stroke-width="1.7"/><path d="M8 9h8M8 13h5" stroke="currentColor" stroke-width="1.7"/></svg><span>客户会话</span></button>
+    <button class="nav-item" data-page="knowledge"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h6a3 3 0 0 1 3 3v14a4 4 0 0 0-4-2H4V4Zm9 3a3 3 0 0 1 3-3h4v15h-3a4 4 0 0 0-4 2" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg><span>企业知识</span></button>
+    <button class="nav-item" data-page="strategy"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 6h14M5 12h14M5 18h14" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="6" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="18" r="2" fill="currentColor"/></svg><span>回复策略</span></button>
+  </nav>
+  <div class="sidebar-bottom"><button class="nav-item more-nav" id="more-open"><span class="more-symbol" aria-hidden="true">···</span><span>更多</span></button><span class="version">LOCAL</span></div>
+</aside>
+<div class="main-shell">
+  <header class="topbar">
+    <div class="workspace-identity"><span class="workspace-symbol" aria-hidden="true">询</span><div><span class="eyebrow">销售工作台</span><h1 id="company-name">正在加载工作区…</h1></div><span class="badge mode-badge" id="mode-badge">连接中</span></div>
+    <div class="sync-controls"><div class="sync-status"><span id="sync-source">读取聊天来源…</span><span id="sync-summary">尚未更新</span></div><button class="button secondary" id="sync-button" disabled><span aria-hidden="true">↻</span><span id="sync-button-label">更新聊天</span></button></div>
+  </header>
+  <div class="global-error" id="global-error" role="alert" hidden></div>
+  <main id="main">
+    <section id="page-inbox" class="page inbox-page" aria-label="客户会话">
+      <div class="mobile-tabs"><button data-pane="list" class="active">客户列表</button><button data-pane="work">聊天与回复</button></div>
+      <div class="inbox-grid" data-mobile-pane="list">
+        <section class="conversation-panel" aria-label="客户列表">
+          <div class="list-heading"><h2>客户询盘 <span id="conversation-count" class="count">0</span></h2><button class="icon-button" id="refresh-list" aria-label="刷新客户列表" title="刷新客户列表">↻</button></div>
+          <button class="button secondary customer-manage-open" id="customers-open" type="button"><span aria-hidden="true">＋</span> 添加 / 管理客户</button>
+          <label class="search-box"><span aria-hidden="true">⌕</span><input id="conversation-search" type="search" placeholder="搜索客户或消息" aria-label="搜索客户或消息" autocomplete="off"></label>
+          <div class="list-filters"><label class="sr-only" for="status-filter">按状态筛选</label><select id="status-filter"><option value="all">全部客户</option><option value="pending">有可用回复</option><option value="needs_analysis">待生成回复</option><option value="stale">需重新生成</option><option value="approved">已采用回复</option></select><span id="visible-count">最近会话</span></div>
+          <div class="conversation-list" id="conversation-list" aria-live="polite"><div class="loading-state"><span class="spinner"></span>读取会话中</div></div>
+          <div class="list-footer" id="workspace-note">独立企业工作区</div>
+        </section>
+        <section class="customer-workspace" aria-label="聊天与回复">
+          <div class="full-empty" id="workspace-empty"><div class="empty-symbol">↗</div><h2>选择客户，准备下一条回复</h2><p>先看清对方的需求，再把想说的话表达准确。</p></div>
+          <div id="workspace-content" class="workspace-content" hidden>
+            <section class="chat-panel" aria-label="客户聊天记录">
+              <header class="chat-heading"><div class="contact-avatar" id="chat-avatar">客</div><div class="chat-person"><h2 id="chat-title">客户</h2><p id="chat-subtitle"></p></div><div class="chat-heading-end"><span id="chat-status" class="badge"></span><span id="chat-message-count"></span></div><button id="conversation-more" class="icon-button" aria-label="当前会话更多操作" title="当前会话更多操作">···</button></header>
+              <div id="message-list" class="message-list" aria-label="聊天消息"></div>
+              <div class="chat-context" id="chat-context-label">聊天记录</div>
+            </section>
+            <section class="reply-panel" aria-label="准备回复">
+              <header class="reply-heading"><div><span class="eyebrow">准备下一条回复</span><h2>你把关，AI 帮你表达</h2></div><div class="reply-controls"><div class="language-control"><label for="reply-language">对客语言</label><select id="reply-language"><option value="auto">跟随客户</option><option value="en">English</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt">Português</option><option value="ar">العربية</option><option value="zh">中文</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="it">Italiano</option><option value="ru">Русский</option></select></div></div></header>
+              <div class="ai-service-status" id="ai-service-status" role="status"><span id="ai-service-status-text">正在连接 AI 服务…</span><div class="ai-service-actions"><button type="button" id="ai-service-retry" class="model-retry">重新检查</button><button type="button" id="ai-settings-open" class="model-retry">负责人设置</button></div></div>
+              <div class="job-banner" id="job-banner" role="status" hidden><span class="spinner" id="job-status-icon" aria-hidden="true"></span><span id="job-status-text"></span><div class="job-actions"><button type="button" class="job-action" id="job-reconnect" hidden>重新连接</button><button type="button" class="job-action stop-generation" id="job-cancel" hidden>停止生成</button></div></div>
+              <div class="reply-body" id="reply-body"><div class="empty-state">正在读取回复…</div></div>
+              <footer class="reply-footer"><div class="generate-actions"><button class="button primary" id="generate-button"><span aria-hidden="true">✧</span> AI 帮我回复</button><button class="button secondary" id="polish-button">润色我写的话</button></div><div class="adopt-actions"><span id="adopt-status">工作台不会向客户发送</span><button class="button primary adopt-button" id="adopt-button" disabled><span aria-hidden="true">⧉</span> 复制回复</button></div></footer>
+            </section>
+          </div>
+        </section>
+      </div>
+    </section>
+    <section id="page-knowledge" class="page management-page" aria-label="企业知识" hidden><div class="page-heading"><div><span class="eyebrow">让回复有据可查</span><h2>企业知识</h2><p>产品、服务范围与业务规则是回复的事实依据。</p></div><button class="button primary" id="knowledge-open">更新企业资料</button></div><div id="knowledge-content"></div></section>
+    <section id="page-strategy" class="page management-page" aria-label="回复策略" hidden><div class="page-heading"><div><span class="eyebrow">按你的习惯沟通</span><h2>回复策略</h2><p>用自然语言告诉 AI 你希望怎样沟通，所有客户共用这份偏好。</p></div></div><form id="strategy-form" class="strategy-card content-card"><div class="strategy-note">策略决定语气、长度与沟通方式，不是产品、价格或交付能力的事实依据。</div><label class="form-label" for="strategy-text">希望 AI 如何帮你回复？</label><textarea id="strategy-text" rows="12" maxlength="12000" placeholder="例如：语气自然友好，先回应客户最关心的问题。每次只问最关键的两三个问题。没有确认的价格和交期不要承诺。"></textarea><p class="form-error" id="strategy-error" role="alert" hidden></p><div class="strategy-footer"><span id="strategy-state">正在读取策略…</span><button class="button primary" id="strategy-submit" type="submit" disabled>保存回复策略</button></div></form></section>
+    <section id="page-activity" class="page management-page" aria-label="运行记录" hidden><div class="page-heading"><div><span class="eyebrow">记录每一步</span><h2>运行记录</h2><p>查看聊天更新、回复生成与采用结果。</p></div><button class="button secondary" id="refresh-activity">刷新记录</button></div><div id="activity-content"></div></section>
+  </main>
+</div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<dialog id="customer-dialog" class="modal customer-modal" aria-labelledby="customer-dialog-title" aria-describedby="customer-explanation">
+  <div class="modal-heading"><div><span class="eyebrow">客户同步名单</span><h2 id="customer-dialog-title">添加 / 管理客户</h2></div><button class="icon-button" type="button" id="customer-close" aria-label="关闭客户管理">×</button></div>
+  <p class="dialog-description" id="customer-explanation">每次打开都会重新扫描已有会话。勾选要加入的客户，保存后点击「更新聊天」。取消勾选只暂停后续同步，历史聊天和回复会保留。</p>
+  <div class="customer-source-panel"><div><strong id="customer-source">正在读取聊天来源…</strong><span id="customer-scanned-at">尚未扫描</span></div><button class="button secondary small" type="button" id="customer-rescan">重新扫描</button></div>
+  <p class="customer-source-note" id="customer-source-note">仅扫描会话名单，不会自动导入消息。</p>
+  <div class="customer-toolbar"><label class="search-box customer-search"><span aria-hidden="true">⌕</span><input id="customer-search" type="search" placeholder="搜索客户名称或号码" aria-label="搜索可添加的客户" autocomplete="off"></label><label class="sr-only" for="customer-filter">筛选客户同步状态</label><select class="text-input" id="customer-filter"><option value="all">全部会话</option><option value="new">未加入</option><option value="active">已加入</option><option value="paused">已暂停</option></select></div>
+  <p class="form-error" id="customer-error" role="alert" hidden></p>
+  <div class="customer-list" id="customer-list" aria-label="可选客户" aria-busy="false"></div>
+  <div class="customer-selection-summary" aria-live="polite"><strong id="customer-selected-count">已选 0 / 100 位</strong><span id="customer-change-count">选择需要同步的客户</span></div>
+  <div class="customer-discard" id="customer-discard" role="alert" hidden><p id="customer-discard-message"></p><div><button type="button" class="button secondary small" id="customer-keep">保留修改</button><button type="button" class="button secondary small" id="customer-discard-confirm">放弃修改</button></div></div>
+  <div class="customer-result" id="customer-result-panel" role="status" hidden><p id="customer-result"></p><button type="button" class="button primary small" id="customer-update" hidden>更新聊天</button></div>
+  <div class="modal-footer"><button type="button" class="button secondary" id="customer-cancel">关闭</button><button type="button" class="button primary" id="customer-save" disabled>保存选择</button></div>
+</dialog>
+<dialog id="more-dialog" class="modal compact-modal"><div class="modal-heading"><h2>更多操作</h2><button class="icon-button" type="button" data-close="more-dialog" aria-label="关闭更多操作">×</button></div><div class="more-actions"><button class="more-action" id="manager-settings-open"><strong>负责人设置</strong><span>AI 服务与回复模型</span></button><button class="more-action" id="import-open"><strong>导入聊天文件</strong><span>载入标准 JSON 聊天记录</span></button><button class="more-action" id="simulation-open"><strong>补充演练消息</strong><span>为当前客户添加一条虚构消息</span></button><button class="more-action" id="activity-open"><strong>查看运行记录</strong><span>生成、导入与采用记录</span></button></div></dialog>
+<dialog id="manager-settings-dialog" class="modal" aria-labelledby="manager-settings-title" aria-describedby="manager-settings-description">
+  <div class="modal-heading"><div><span class="eyebrow">由负责人维护</span><h2 id="manager-settings-title">负责人设置</h2></div><button class="icon-button" type="button" data-close="manager-settings-dialog" aria-label="关闭负责人设置">×</button></div>
+  <p class="dialog-description" id="manager-settings-description">日常生成回复无需调整这里。设置入口未设置账号权限，请由负责人维护。</p>
+  <div class="manager-service"><strong>AI 服务</strong><p id="manager-service-engine">正在读取接入方式…</p><p>聊天和企业资料由企业配置的云端 AI 服务处理；本机负责连接、保存记录与展示结果。</p></div>
+  <label class="form-label" for="reply-model">回复模型</label><select class="text-input" id="reply-model" disabled aria-describedby="model-status-text manager-model-note"><option value="">正在读取…</option></select>
+  <div class="model-status" id="model-status" role="status"><span id="model-status-text">正在读取可用模型…</span><button type="button" id="model-retry" class="model-retry">重新读取</button></div>
+  <p class="reply-note" id="manager-model-note">选择立即记住在当前浏览器、企业与端口，仅影响后续回复。读取列表和切换型号不会生成回复；不可用时不会自动改用其他型号。</p>
+  <div class="modal-footer"><button class="button primary" type="button" data-close="manager-settings-dialog">完成</button></div>
+</dialog>
+<dialog id="message-dialog" class="modal"><form id="message-form"><div class="modal-heading"><h2>补充演练客户消息</h2><button class="icon-button" type="button" data-close="message-dialog" aria-label="关闭演练消息">×</button></div><p class="dialog-description" id="message-target">仅加入当前演练会话，不会发送。</p><label class="form-label" for="message-body">虚构客户说了什么？</label><textarea id="message-body" class="text-input" rows="5" maxlength="10000" placeholder="例如：体积是 3.5 立方米。" required></textarea><p class="form-error" id="message-error" role="alert" hidden></p><div class="modal-footer"><button class="button secondary" type="button" data-close="message-dialog">取消</button><button class="button primary" type="submit" id="message-submit">添加演练消息</button></div></form></dialog>
+  <dialog id="import-dialog" class="modal"><form id="import-form"><div class="modal-heading"><div><span class="eyebrow">聊天资料</span><h2>导入聊天记录</h2></div><button class="icon-button" type="button" data-close="import-dialog" aria-label="关闭导入窗口">×</button></div><p class="dialog-description">选择当前企业的标准消息 JSON 文件。重复消息会自动跳过，不会重复入库。</p><label class="file-picker" for="import-file"><span class="file-picker-icon">↥</span><strong>选择 JSON 文件</strong><span>最多 5 MB · 2,000 条消息</span><input id="import-file" type="file" accept=".json,application/json" required></label><label class="form-label" for="import-source">来源名称</label><input class="text-input" id="import-source" maxlength="120" placeholder="例如：9 月客户询盘" required><details class="format-help"><summary>文件需要包含哪些信息？</summary><p>文件为标准消息数组，或含 records 数组的对象。每条消息需包含企业、账号、会话、消息 ID、方向、正文、发送与接收时间以及数据模式。公司与模式必须匹配当前工作区。</p></details><p class="form-error" id="import-error" role="alert" hidden></p><div class="modal-footer"><button class="button secondary" type="button" data-close="import-dialog">取消</button><button class="button primary" id="import-submit" type="submit">导入记录</button></div></form></dialog>
+  <dialog id="knowledge-dialog" class="modal wide-modal"><form id="knowledge-form"><div class="modal-heading"><div><span class="eyebrow">企业资料管理</span><h2>发布知识更新</h2></div><button class="icon-button" type="button" data-close="knowledge-dialog" aria-label="关闭知识窗口">×</button></div><p class="dialog-description">选择一份资料，更新内容与有效期。发布后，已生成的回复需要重新核查。</p><label class="form-label" for="knowledge-document">要更新的资料</label><select id="knowledge-document" class="text-input"></select><div id="knowledge-fields"><label class="form-label" for="knowledge-title">资料标题</label><input id="knowledge-title" class="text-input" maxlength="300"><label class="form-label" for="knowledge-content-editor">资料内容</label><textarea id="knowledge-content-editor" class="text-input knowledge-content-editor" rows="6"></textarea><div class="knowledge-form-row"><div><label class="form-label" for="knowledge-version">资料版本</label><input id="knowledge-version" class="text-input" placeholder="例如：2"></div><div><label class="form-label" for="knowledge-from">生效日期</label><input id="knowledge-from" type="date" class="text-input"></div><div><label class="form-label" for="knowledge-until">截止日期</label><input id="knowledge-until" type="date" class="text-input"></div></div><p class="reply-note">内容有变化时，请同步更新版本号，便于复盘引用依据。</p></div><details class="advanced-config"><summary>高级配置：规则与 JSON 文件</summary><label class="form-label" for="knowledge-file">从 JSON 文件载入（可选）</label><input id="knowledge-file" type="file" accept=".json,application/json"><label class="form-label" for="knowledge-json">完整知识配置</label><textarea id="knowledge-json" class="code-editor" rows="12" spellcheck="false" required></textarea><p class="reply-note">此处可维护询盘必备字段与回复规则。企业与数据模式必须匹配当前工作区。</p></details><p id="knowledge-validation" class="validation-note"></p><p class="form-error" id="knowledge-error" role="alert" hidden></p><div class="modal-footer"><button class="button secondary" type="button" id="knowledge-validate">检查内容</button><button class="button primary" type="submit" id="knowledge-submit">校验并发布</button></div></form></dialog>
+  <dialog id="customer-model-dialog" class="modal"><div class="modal-heading"><h2>使用云端 AI 处理客户资料</h2><button class="icon-button" type="button" data-close="customer-model-dialog" aria-label="关闭确认窗口">×</button></div><p class="dialog-description">将当前会话、当日有效企业资料和本次回复要求发送至企业配置的云端 AI 服务。请确认这些业务资料已获准交给该服务处理。</p><div class="modal-footer"><button class="button secondary" type="button" data-close="customer-model-dialog">取消</button><button class="button primary" type="button" id="customer-model-confirm">确认并继续</button></div></dialog>
+</body>
+</html>
