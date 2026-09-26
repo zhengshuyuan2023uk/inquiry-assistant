@@ -6,7 +6,7 @@
 
 **2 分 27 秒看懂怎么用 · 中文配音和字幕**
 
-[![询盘助手业务员上手视频](https://github.com/zhengshuyuan2023uk/inquiry-assistant/releases/download/sales-guide-r3/cover.jpg)](https://github.com/zhengshuyuan2023uk/inquiry-assistant/releases/tag/sales-guide-r3)
+https://github.com/user-attachments/assets/ac81b48e-0f21-484b-9d98-780d1fb15a10
 
 添加客户 → 更新聊天 → 三种回复操作 → 企业资料与回复设置 → 人工核对、复制发送。全部使用虚构数据演示。
 
